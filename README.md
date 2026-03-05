@@ -377,6 +377,150 @@ Para ver la arquitectura de la fase 3, enfoquémonos en la autenticación: simpl
 > [!IMPORTANT]
 > Actualiza el repositorio, que ahora incluyen elementos de la fase 3, realizando un `sync` desde GitHub. Una vez realizada la sincronización, ejecuta con un `git pull` sobre **TU** repositorio para descargar los cambios.
 
-## Creación de user-pool de Cognito
+## Nuevo cliente VUE con soporte para autenticación
 
-Ve a la consola web y crea un nuevo user-pool de Cognito,  
+Ya puedes descargarte el nuevo cliente VUE con soporte para autenticación de Cognito. Observa su nueva estructura, que no muestra nada ni permite realizar ninguna operación hasta que el usuario se autentique.
+
+Descárgala en un directorio local para realizar las pruebas como hiciste con la versión anterior.
+
+## Creación y configuración de user-pool de Cognito
+
+Ve a la consola web y crea un nuevo user-pool de Cognito con el nombre que quieras, indicando que es para una aplicación SPA, que los usuarios se identifican con el username, deshabilitando el auto-registro y con el email como único campo requerido, es decir, las opciones lo más sencillas posible.
+
+Para unas primeras pruebas con el nuevo cliente VUE que te has descargado puedes poner como return URL la dirección http://localhost:puertoVUE (en mi caso puerto 5173).
+
+Una vez creada dale abajo a "Go to overview". La única configuración restante tiene que ver con el cliente. Para ello ve a *App Client* y dentro de la pestaña *Login pages* edita las opciones. Por un lado, deberás añadir la misma dirección de callback para el logout, eso es evidente.
+
+Por otra parte, en la sección de *OAuth 2.0 grant types* añadiremos *"Implicit grant"*. Nos hará una advertencia indicando que esta forma de trabajar se considera *legacy* y que deberíamos pasarnos a un flujo PKCE:
+
+![img](./imagenes/09_detalle_implicit_grant.jpg)
+
+Para esta práctica vamos a usar el flow con *Implicit Grant*, que Cognito nos avisa que es menos seguro. Esto es debido a que los tokens viajan en la URL (más expuestos en logs ehistorial), pero lo dejamos así por simplicidad didáctica, para no entrar en la complejidad del PKCE (code_challenge/verifier), que sería lo correcto en producción.
+
+Ahora puedes recorrer las características interesantes de una *user pool*, como los métodos de autenticación y política de contraseñas, los proveedores externos y extensiones, la capa de seguridad y la personalización de la pantalla de login, términos y condiciones, etc. No es necesario que hagas nada, es sólo explorativo de las posibilidades.
+
+Finalmente, copia y pega los datos necesarios en archivo .env del cliente VUE que ahora lleva la capa de Cognito:
+
+```
+VITE_API_URL=Esto no cambia
+VITE_COGNITO_DOMAIN=us-east-1xxxxxxxx.auth.us-east-1.amazoncognito.com
+VITE_COGNITO_CLIENT_ID=xxxxxxxxx
+VITE_COGNITO_REDIRECT_URI=http://localhost:puerto/
+```
+
+## Integración de autenticación Cognito en la API
+
+Ahora debemos modificar el API Gateway para que utilice Cognito como autenticación y no admita peticiones anónimas. Esto lógicamente sí que lo vamos a hacer con la plantilla de SAM, en dos partes.
+
+Primeramente deberemos informar a la plantilla de que existe la *user pool* de Cognito. Una manera sencilla puede ser colocar el ARN de nuestra *user pool* como parámetro con un valor por defecto (ponlo justo antes de la sección *Resources*) que luego será referenciado en la API.
+
+Sumando todo quedaría así:
+
+```yaml
+Parameters:
+  CognitoUserPoolArn:
+    Type: String
+    Default: "arn:aws:cognito-idp:us-east-1:xxxxx:userpool/us-east-xxxxxxx"  
+
+Resources:
+  # API Gateway explícito para CORS
+  NotesApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Ref CognitoUserPoolArn
+        AddDefaultAuthorizerToCorsPreflight: false
+```
+
+Observa que es una simple sección *Auth* indicando el autorizador y ya está. La opción *AddDefaultAuthorizerToCorsPreflight* es necesaria porque en el navegador se vería bloqueada por *CORS* el *OPTIONS preflight*.
+
+Ahora ya sólo queda desplegar la plantilla con los cambios mediante SAM como hemos hecho en apartados anteriores y esperar la actualización de la API.
+
+## Test de la nueva API con autorizador y JWTs
+
+Vamos a realizar un test a bajo nivel con curl que nos permita entender mejor el funcionamiento más allá de las complejidades del cliente VUE.
+
+Para ello, crearemos un usuario en la *user pool*, por ejemplo llamado "usuario" con una contraseña sencilla pero que cumpla requerimientos, un email inventado que marcaremos como verificado.
+
+Entra en el usuario y observa dos cosas.
+
+Por un lado, ha creado automáticamente un campo llamado "sub" con un id en formado uuid. Si revisas el código de los handlers lambda, esta será la identificación que tendrá el usuario como UserId dentro de nuestra tabla de DynamoDB para todas las operaciones sobre notas. No más "testuser".
+
+![img](./imagenes/10_detalle_sub.jpg)
+
+Por otro lado, la contraseña debe ser cambiada en el primer login. Esto impediría la posibilidad de hacer tests a bajo nivel con curl como el que queremos hacer. La solución es fácil, simplemente con la CLI confirmamos la contraseña como permanente con este comando:
+
+```bash
+aws cognito-idp admin-set-user-password \
+  --user-pool-id us-east-xxxxxxxx \
+  --username usuario  --password PonAquiTuPass \
+  --permanent --region us-east-1
+```
+
+Ahora prueba a realizar con curl una petición a la API sin autenticar para que te dé un listado de notas:
+
+```bash
+curl -X GET "https://<URL_DE_TU_API>/Prod/notes" -v
+```
+
+Esta petición anteriormente nos daría un listado de las notas del usuario "testuser" anónimo, pero ahora fallará porque necesita autenticación. Para ello vamos a iniciar proceso de autenticación en Cognito con el usuario que hemos creado y recoger el Identity token:
+
+```bash
+aws cognito-idp admin-initiate-auth \
+  --user-pool-id us-east-1_xxxxxxxx \
+  --client-id xxxxxxxxxxxxxxxxxxxxx \
+  --auth-flow ADMIN_NO_SRP_AUTH \
+  --auth-parameters USERNAME=usuario,PASSWORD=PonAquiTuPass \
+  --region us-east-1
+```
+
+Esto nos devolverá el habitual JSON con los JWTs, copia el Identity Token y pégalo en una nueva petición curl, esta vez autenticada:
+
+```bash
+curl -X GET "https://<URL_DE_TU_API>/Prod/notes" \
+  -H "Authorization: Bearer <IdentityTokenCOMPLETO>" -v
+```
+
+Verás que no da error, pero tampoco devuelve ninguna nota. Es normal, porque el usuario autenticado no ha añadido ninguna. Vamos a añadir una nota llamando a la API para ello también de forma autenticada:
+
+```bash
+curl -X POST "https://<URL_DE_TU_API>/Prod/notes" \
+  -H "Authorization: Bearer <IdentityTokenCOMPLETO>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "noteId": "primera-nota-autenticada",
+    "text": "Texto de la nota autenticada"
+  }' -v
+```
+
+Si ahora repites la petición GET autenticada, te saldrá la nota que has añadido.
+
+> [!IMPORTANT]
+> Revisa la tabla de DynamoDB para ver cómo conviven las notas antiguas (peticiones anónimas y "testuser") con las notas nuevas (con uuid autenticado), deberías ver algo así:
+
+![img](./imagenes/11_primera_nota_autenticada.jpg)
+
+
+## Prueba local con el cliente VUE con autenticación y puesta en producción
+
+Ahora ya puedes probar el cliente con autenticación en local y testear su funcionamiento, creando, editando, procesando y eliminando notas, verás que con el siguiente comando salta una ventana a `localhost:xxx` como en la fase 2:
+
+```
+npm run dev
+```
+
+Si todo está bien, actualiza en el .env el valor de *VITE_COGNITO_REDIRECT_URI* a la URL en producción con subdominio *alcmarenostrum.click* y ya podemos compilarlo. Nos creará una carpeta `dist` para poder subirlo:
+
+```
+npm run build
+```
+
+Súbelo al bucket S3 `notas-` + tus iniciales, eliminando previamente reemplazar la versión sin autenticación. Para asegurarnos que CloudFront no sigue cacheando una versión antigua, es conveniente realizar una invalidación de caché como en la fase 2. Una vez hecho, vuelve a hacer las pruebas de funcionamiento y todo listo.
