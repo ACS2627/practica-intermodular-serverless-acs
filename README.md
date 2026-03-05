@@ -366,3 +366,60 @@ Eso debe especificarse de nuevo en el parámetro `VITE_API_URL` del archivo `.en
 
 
 # Fase 3
+
+## Arquitectura de la fase 3
+
+![img](./imagenes/08_detalle_fase3.jpg)
+
+
+Para ver la arquitectura de la fase 3, enfoquémonos en la autenticación: simplemente se trata de añadir esa capa medisante Cognito. Las funciones Lambda ya están preparadas para ello, sólo se trata de crear una *user-pool*, supeditar la API a que autentique las peticiones (no admitiéndose ya peticiones anónimas de "testuser") y actualizar el cliente para que exija esa autenticación antes de enviar solicitud alguna a la API.
+
+> [!IMPORTANT]
+> Actualiza el repositorio, que ahora incluyen elementos de la fase 3, realizando un `sync` desde GitHub. Una vez realizada la sincronización, ejecuta con un `git pull` sobre **TU** repositorio para descargar los cambios.
+
+## Creación de user-pool de Cognito
+
+Ve a la consola web y crea un nuevo user-pool de Cognito,  
+
+```yaml
+Resources:
+  # API Gateway explícito para CORS
+  NotesApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'"
+        AllowOrigin: "'*'"
+
+  # Función Lambda para obtener las notas de un usuario
+  getNotes:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/getNotes.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 5
+      Description: Función para leer las notas de la tabla
+      Policies:
+        # Política de permisos para interactuar con la tabla de DynamoDB. Permisos CRUD.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AppTable
+      Environment:
+        Variables:
+          # Referencia al nombre de la tabla a través de una variable de entorno
+          APP_TABLE: !Ref AppTable
+
+      # Cambios añadidos
+      Events:
+        GetNotesApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref NotesApi  
+            Path: /notes
+            Method: get
+```
+Añade también un `Output` para la dirección del API Gateway que genere (opcional, pero buena práctica).
