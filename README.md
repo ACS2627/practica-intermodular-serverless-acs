@@ -229,7 +229,7 @@ Las funciones que faltan son:
 ![img](./imagenes/04-arq-fase2.jpg)
 
 > [!IMPORTANT]
-> Actualiza el repositorio, que ahora incluyen elementos de la fase 2, realizando un `sync` desde GitHub. Una vez realizada la sincronización, ejecuta con un `git pull` sobre **TU** repositorio para descargar los cambios.
+> Actualiza el repositorio, que ahora incluye elementos de la fase 2, realizando un `sync` desde GitHub. Una vez realizada la sincronización, ejecuta con un `git pull` sobre **TU** repositorio para descargar los cambios.
 
 ## Creación de la API en AWS SAM
 
@@ -372,7 +372,7 @@ Eso debe especificarse de nuevo en el parámetro `VITE_API_URL` del archivo `.en
 ![img](./imagenes/08_detalle_fase3.jpg)
 
 
-Para ver la arquitectura de la fase 3, enfoquémonos en la autenticación: simplemente se trata de añadir esa capa medisante Cognito. Las funciones Lambda ya están preparadas para ello, sólo se trata de crear una *user-pool*, supeditar la API a que autentique las peticiones (no admitiéndose ya peticiones anónimas de "testuser") y actualizar el cliente para que exija esa autenticación antes de enviar solicitud alguna a la API.
+Para ver la arquitectura de la fase 3, enfoquémonos en la autenticación: simplemente se trata de añadir esa capa mediante Cognito. Las funciones Lambda ya están preparadas para ello, sólo se trata de crear una *user-pool*, supeditar la API a que autentique las peticiones (no admitiéndose ya peticiones anónimas de "testuser") y actualizar el cliente para que exija esa autenticación antes de enviar solicitud alguna a la API.
 
 > [!IMPORTANT]
 > Actualiza el repositorio, que ahora incluyen elementos de la fase 3, realizando un `sync` desde GitHub. Una vez realizada la sincronización, ejecuta con un `git pull` sobre **TU** repositorio para descargar los cambios.
@@ -397,9 +397,9 @@ Por otra parte, en la sección de *OAuth 2.0 grant types* añadiremos *"Implicit
 
 ![img](./imagenes/09_detalle_implicit_grant.jpg)
 
-Para esta práctica vamos a usar el flow con *Implicit Grant*, que Cognito nos avisa que es menos seguro. Esto es debido a que los tokens viajan en la URL (más expuestos en logs ehistorial), pero lo dejamos así por simplicidad didáctica, para no entrar en la complejidad del PKCE (code_challenge/verifier), que sería lo correcto en producción.
+Para esta práctica vamos a usar el flow con *Implicit Grant*, que Cognito nos avisa que es menos seguro. Esto es debido a que los tokens viajan en la URL (más expuestos en logs e historial), pero lo dejamos así por simplicidad didáctica, para no entrar en la complejidad del PKCE (code_challenge/verifier), que sería lo correcto en producción.
 
-Ahora puedes recorrer las características interesantes de una *user pool*, como los métodos de autenticación y política de contraseñas, los proveedores externos y extensiones, la capa de seguridad y la personalización de la pantalla de login, términos y condiciones, etc. No es necesario que hagas nada, es sólo explorativo de las posibilidades.
+Ahora puedes recorrer las características interesantes de una *user pool*, como los métodos de autenticación y política de contraseñas, los proveedores externos y extensiones, la capa de seguridad y la personalización de la pantalla de login, términos y condiciones, etc. No es necesario que hagas nada, es sólo exploratorio de las posibilidades.
 
 Finalmente, copia y pega los datos necesarios en archivo .env del cliente VUE que ahora lleva la capa de Cognito:
 
