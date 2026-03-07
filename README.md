@@ -671,7 +671,7 @@ CloudWatch Application Insights proporciona dashboards automáticos y detección
 2.  Haz clic en **Add an application**
 3.  Selecciona **Resource group based application**
 4.  Localiza y selecciona el grupo de recursos asociado a la **plantilla SAM** del proyecto. Si no aparece, pulsa en la opción `Register an application`:
-    ![img](./imagenes/14_resources.png)
+    ![img](./imagenes/14-resources.png)
 5.  Deja las opciones por defecto y **crea la aplicación**
 
 Una vez creada la aplicación, Application Insights creará automáticamente:
