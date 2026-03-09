@@ -2,9 +2,30 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: >-
   Práctica intermodular serverless
 Transform:
-- AWS::Serverless-2016-10-31
+  - AWS::Serverless-2016-10-31
+
+Parameters:
+  CognitoUserPoolArn:
+    Type: String
+    Default: "arn:aws:cognito-idp:us-east-1:745623467555:userpool/us-east-1_hlSZ2iI0Q"  # Pon aquí tu ARN
 
 Resources:
+  # API Gateway explícito para CORS
+  NotesApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Ref CognitoUserPoolArn
+        AddDefaultAuthorizerToCorsPreflight: false
+        
   # Función Lambda para obtener las notas de un usuario
   getNotes:
     Type: AWS::Serverless::Function
@@ -24,6 +45,40 @@ Resources:
         Variables:
           # Referencia al nombre de la tabla a través de una variable de entorno
           APP_TABLE: !Ref AppTable
+      Events:
+        GetNotesApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref NotesApi  
+            Path: /notes
+            Method: get
+
+  # Función Lambda para obtener una nota
+  getNote:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/getNote.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 5
+      Description: Función para leer una nota
+      Policies:
+        # Política de permisos para interactuar con la tabla de DynamoDB. Permisos CRUD.
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AppTable
+      Environment:
+        Variables:
+          # Referencia al nombre de la tabla a través de una variable de entorno
+          APP_TABLE: !Ref AppTable
+      Events:
+        GetNoteApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref NotesApi  
+            Path: /notes/{noteId}
+            Method: get
 
   # Función Lambda para crear una nota para un usuario
   postNotes:
@@ -44,10 +99,95 @@ Resources:
         Variables:
           # Referencia al nombre de la tabla a través de una variable de entorno
           APP_TABLE: !Ref AppTable
+      Events:
+        PostNotesApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref NotesApi  
+            Path: /notes
+            Method: post
 
-  # TODO: Añadir las funciones que faltan a continuación
+  putNote:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/putNote.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 5
+      Description: Actualizar nota específica
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AppTable
+      Environment:
+        Variables:
+          APP_TABLE: !Ref AppTable
+      Events:
+        PutNoteApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref NotesApi  
+            Path: /notes/{noteId}
+            Method: put
 
+  deleteNote:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/deleteNote.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 5
+      Description: Borrar nota específica
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AppTable
+      Environment:
+        Variables:
+          APP_TABLE: !Ref AppTable
+      Events:
+        DeleteNoteApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref NotesApi  
+            Path: /notes/{noteId}
+            Method: delete
 
+  processNote:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/handlers/processNote.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      MemorySize: 512
+      Timeout: 30
+      Description: Polly + S3 + Translate
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AppTable
+        - S3CrudPolicy:
+            BucketName: !Ref AppBucket
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - polly:SynthesizeSpeech
+                - translate:TranslateText
+              Resource: '*'
+      Environment:
+        Variables:
+          APP_TABLE: !Ref AppTable
+          APP_S3: !Ref AppBucket
+      Events:
+        ProcessNoteApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref NotesApi 
+            Path: /notes/{noteId}/process
+            Method: post
 
 
   # Tabla DynamoDB
@@ -71,9 +211,33 @@ Resources:
           KeyType: RANGE
       BillingMode: PAY_PER_REQUEST
 
+  # Bucket S3 para MP3s de Polly
+  AppBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-audios-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+
+
 # Salidas para mostrar el nombre de las funciones que se han creado
 Outputs:
   getNotesFunctionName:
     Value: !Ref getNotes
+  getNoteFunctionName:
+    Value: !Ref getNote
   postNotesFunctionName:
     Value: !Ref postNotes
+  putNoteFunctionName:
+    Value: !Ref putNote
+  deleteNoteFunctionName:
+    Value: !Ref deleteNote
+  processNoteFunctionName:
+    Value: !Ref processNote
+  NotesApiUrl:
+    Description: "URL de la API Gateway para testing frontend"
+    Value: !Sub "https://${NotesApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
