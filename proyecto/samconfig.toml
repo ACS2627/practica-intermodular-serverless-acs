@@ -1,14 +1,13 @@
 version = 0.1
 
 [default.deploy.parameters]
-stack_name = "acs-servelress-test1"
+stack_name = "test2"
 resolve_s3 = true
-s3_prefix = "acs-servelress-test1"
-region = "eu-south-2"
-confirm_changeset = true
+s3_prefix = "test2"
 capabilities = "CAPABILITY_IAM"
-disable_rollback = true
+parameter_overrides = "CognitoUserPoolArn=\"arn:aws:cognito-idp:eu-south-2:190718859382:userpool/eu-south-2_J0dhWKeKa\""
 image_repositories = []
+confirm_changeset = true
 
 [default.global.parameters]
 region = "eu-south-2"

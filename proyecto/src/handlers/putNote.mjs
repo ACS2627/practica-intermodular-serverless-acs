@@ -7,62 +7,65 @@ const corsHeaders = {
 };
 
 export const handler = async (event) => {
-  if (event.httpMethod !== "PUT") {
-    return {
-      statusCode: 405,
-      headers: corsHeaders,
-      body: JSON.stringify({ message: `Método no permitido. Usaste: ${event.httpMethod}` })
-    };
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 200, headers: corsHeaders, body: "" };
   }
 
-  console.info("Petición recibida:", event);
-
-  const noteId = event.pathParameters?.noteId;
-  if (!noteId) {
-    return {
-      statusCode: 400,
-      headers: corsHeaders,
-      body: JSON.stringify({ message: "Falta el parámetro noteId en la URL" })
-    };
-  }
-
+  const noteId = event.pathParameters?.noteId || event.pathParameters?.id;
+  
   let userId;
   try {
     userId = event.requestContext.authorizer.claims.sub;
   } catch {
-    userId = "testuser";
+    userId = "testuser"; 
   }
 
-  let title, content, timestamp;
+  let body = {};
   try {
-    const body = JSON.parse(event.body);
-    title = body.title;
-    content = body.content;   // <-- Usa content (correcto)
-    timestamp = body.timestamp || Date.now();
-    if (!title || !content) {
-      throw new Error("Faltan campos obligatorios (title, content)");
-    }
+    body = JSON.parse(event.body);
   } catch (err) {
+    return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ message: "JSON inválido" }) };
+  }
+
+  // --- SOLUCIÓN AQUÍ ---
+  // Tu frontend envía: {"attributes": {"text": "..."}}
+  // Extraemos los datos buscando tanto en la raíz como dentro de 'attributes'
+  const source = body.attributes || body; 
+  
+  const title = source.title || source.titulo || "Sin título"; // Fallback si no hay título
+  const text = source.text || source.content || source.nota;
+  const timestamp = body.timestamp || source.timestamp || Date.now();
+
+  if (!text) {
     return {
       statusCode: 400,
       headers: corsHeaders,
-      body: JSON.stringify({ message: "Cuerpo de petición inválido o incompleto" })
+      body: JSON.stringify({ 
+        message: "No se encontró el texto de la nota",
+        recibido: body 
+      })
     };
   }
 
   try {
-    const note = await libreria.postNoteForUser(userId, noteId, title, content, timestamp);
+    // Llamamos a la función de la librería (asegúrate de que updateNote en auxFunctions use estos campos)
+    await libreria.updateNote(userId, noteId, {
+      title: title,
+      text: text,
+      timestamp: timestamp
+    });
+
     return {
       statusCode: 200,
       headers: corsHeaders,
-      body: JSON.stringify(note)
+      body: JSON.stringify({ message: "Nota actualizada", noteId })
     };
   } catch (err) {
-    console.error("Error en putNote:", err);
+    console.error("Error:", err);
     return {
       statusCode: 500,
       headers: corsHeaders,
-      body: JSON.stringify({ message: "Error al guardar la nota" })
+      body: JSON.stringify({ message: "Error al actualizar", error: err.message })
     };
   }
 };

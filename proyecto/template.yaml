@@ -7,8 +7,16 @@ Transform:
 Parameters:
   CognitoUserPoolArn:
     Type: String
-    Default: "arn:aws:cognito-idp:us-east-1:745623467555:userpool/us-east-1_hlSZ2iI0Q"  # Pon aquí tu ARN
+    Default: "arn:aws:cognito-idp:eu-south-2:190718859382:userpool/eu-south-2_J0dhWKeKa"  # Pon aquí tu ARN
 
+Globals:
+  Function:
+    Tracing: Active
+    Layers:
+      - 'arn:aws:lambda:eu-south-2:490004653786:layer:AWSOpenTelemetryDistroJs:11'
+    Environment:
+      Variables:
+        AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-instrument
 Resources:
   # API Gateway explícito para CORS
   NotesApi:
